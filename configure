@@ -14,6 +14,7 @@ XSC=
 _append=""
 RCV=`command -v xbps-checkvers 2>/dev/null`
 RCV_F="repo-checkvers.txt"
+RCV_FPV="repo-checkvers-pkgver.txt"
 RCV_FR="repo-checkvers-remove.txt"
 TOBUILD=
 _TOBUILD=
@@ -126,7 +127,9 @@ case "$?" in
 0) # version < 0.54
 	grep pkgname "$RCV_F" | awk '{ print $2 }' >pkgs.txt ;;
 1) # version >= 0.54
-	cut -d' ' -f1 "$RCV_F" >pkgs.txt ;;
+	cut -d' ' -f1 "$RCV_F" >pkgs.txt
+	cut -d' ' -f1-2 "$RCV_F" > "$RCV_FPV"
+	;;
 *)
 	echo "ERROR: couldn't determine xbps-checkvers version"
 	exit 1
@@ -145,9 +148,15 @@ mkdir -p tobuild built toremove removed
 for p in `cat pkgs.txt`; do
 	if [ -f "$SRCPKGS/$p/template" ]; then
 		$XSC show-avail $p 2>/dev/null
-		if [ $? -eq 0 ]; then
-			touch tobuild/$p
-		fi
+		case $? in
+			0)
+				touch tobuild/$p
+				;;
+			2)
+				pkgver="$(grep "^$p " < $RCV_FPV | tail -n 1 | tr ' ' -)"
+				touch toremove/$pkgver
+				;;
+		esac
 	fi
 done
 [ -f pkgs-removed.txt ] && cat pkgs-removed.txt | while read p old; do

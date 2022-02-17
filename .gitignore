@@ -5,3 +5,4 @@ pkgs.txt
 pkgs-removed.txt
 repo-checkvers.txt
 repo-checkvers-remove.txt
+repo-checkvers-pkgver.txt
