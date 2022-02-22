@@ -153,8 +153,12 @@ for p in `cat pkgs.txt`; do
 				touch tobuild/$p
 				;;
 			2)
-				pkgver="$(grep "^$p " < $RCV_FPV | tail -n 1 | tr ' ' -)"
-				touch toremove/$pkgver
+				version="$(grep "^$p " < $RCV_FPV | tail -n 1 | cut -d' ' -f2)"
+				touch toremove/$p-$version
+				$XSC show $p 2>/dev/null | grep '^subpackages:' | cut -d: -f2- |
+					while read -r sub; do
+						touch toremove/$sub-$version
+					done
 				;;
 		esac
 	fi
