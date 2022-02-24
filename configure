@@ -47,7 +47,7 @@ while getopts a:Cc:d:Nm:th:vR: OPT; do
 		exit 0
 		;;
 	C)
-		rm -rf tobuild built toremove removed
+		rm -rf tobuild built toremove removed toremove32bit removed32bit
 		rm -f *.txt Makefile
 		exit 0
 		;;
@@ -143,8 +143,10 @@ if $RCV -h 2>&1 | grep -q -e $RCV_REMOVED; then
 fi
 
 printf "INFO: Creating source targets...\n"
-rm -rf tobuild built toremove removed
-mkdir -p tobuild built toremove removed
+TOREMOVE=
+TOREMOVE32BIT=
+rm -rf tobuild built toremove removed toremove32bit removed32bit
+mkdir -p tobuild built toremove removed toremove32bit removed32bit
 for p in `cat pkgs.txt`; do
 	if [ -f "$SRCPKGS/$p/template" ]; then
 		$XSC show-avail $p 2>/dev/null
@@ -154,23 +156,35 @@ for p in `cat pkgs.txt`; do
 				;;
 			2)
 				version="$(grep "^$p " < $RCV_FPV | tail -n 1 | cut -d' ' -f2)"
-				touch toremove/$p-$version
-				$XSC show $p 2>/dev/null | grep '^subpackages:' | cut -d: -f2- |
-					while read -r sub; do
-						touch toremove/$sub-$version
-					done
+				TOREMOVE+="$p-$version "
+				TOREMOVE+="$p-dbg-$version "
+				[ "$XBPS_ARCH" = i686 ] && TOREMOVE32BIT+="$p-32bit-$version "
+				while read -r sub; do
+					TOREMOVE+="$sub-$version "
+					TOREMOVE+="$sub-dbg-$version "
+					[ "$XBPS_ARCH" = i686 ] && TOREMOVE32BIT+="$sub-32bit-$version "
+				done < <($XSC show $p 2>/dev/null | grep '^subpackages:' | cut -d: -f2-)
 				;;
 		esac
 	fi
 done
-[ -f pkgs-removed.txt ] && cat pkgs-removed.txt | while read p old; do
-	if ! [ -f "$SRCPKGS/$p/template" ]; then
-		touch toremove/$p-$old
-	fi
-done
+if [ -f pkgs-removed.txt ] ; then
+	while read p old; do
+		if ! [ -f "$SRCPKGS/$p/template" ]; then
+			TOREMOVE+="$p-$old "
+		fi
+	done < pkgs-removed.txt
+fi
 
 _TOBUILD="`find tobuild -type f`"
-TOREMOVE="`find toremove -type f -printf '%f '`"
+
+for i in $TOREMOVE; do
+	touch toremove/$i
+done
+
+for i in $TOREMOVE32BIT; do
+	touch toremove32bit/$i
+done
 
 concat() {
 	local found=0
@@ -238,14 +252,22 @@ printf "print_pkgs:\n"						>> Makefile
 printf "\t@echo \$(PKGS)\n\n"					>> Makefile
 printf "print_pkgs_removed:\n"						>> Makefile
 printf "\t@echo \$(PKGS_REMOVED)\n\n"					>> Makefile
+
 printf "built/%%: tobuild/%%\n"					>> Makefile
 printf "\t@echo \"[xbps-src]\t\${@F}\"\n"			>> Makefile
 printf "\t@( $XSC pkg \${@F}; rval=\$\$?; [ \$\$rval -eq 2 ] && exit 0 || exit \$\$rval )\n"	>> Makefile
 printf "\t@touch \$@\n"						>> Makefile
 printf "\t@rm tobuild/\${@F}\n\n"				>> Makefile
+
 printf "removed/%%: toremove/%%\n"					>> Makefile
 printf "\t@echo \"[xbps-rindex --remove --stage]\t\${@F}\"\n"			>> Makefile
-printf "\t@find \"$HOSTDIR/binpkgs\" -name \${@F}.$PKG_ARCH.xbps -exec env ${CROSS_ARCH:+XBPS_TARGET_ARCH=$CROSS_ARCH} xbps-rindex --remove --stage '{}' ';'\n"	>> Makefile
+printf "\t@find \"$HOSTDIR/binpkgs\" -name \${@F}.$PKG_ARCH.xbps -exec env XBPS_ARCH=$PKG_ARCH ${CROSS_ARCH:+XBPS_TARGET_ARCH=$CROSS_ARCH} xbps-rindex --remove --stage '{}' ';'\n"	>> Makefile
+printf "\t@touch \$@\n"						>> Makefile
+printf "\t@rm toremove/\${@F}\n\n"				>> Makefile
+
+printf "removed32bit/%%: toremove32bit/%%\n"					>> Makefile
+printf "\t@echo \"[xbps-rindex --remove --stage # multilib]\t\${@F}\"\n"			>> Makefile
+printf "\t@find \"$HOSTDIR/binpkgs\" -name \${@F}.x86_64.xbps -exec env XBPS_TARGET_ARCH=x86_64 ${CROSS_ARCH:+XBPS_TARGET_ARCH=$CROSS_ARCH} xbps-rindex --remove --stage '{}' ';'\n"	>> Makefile
 printf "\t@touch \$@\n"						>> Makefile
 printf "\t@rm toremove/\${@F}\n\n"				>> Makefile
 
@@ -275,6 +297,9 @@ for p in $TOBUILD; do
 	printf "built/$p: $deps\n"				>> Makefile
 done
 
+printf "\n"					>> Makefile
+printf "# Remove targets\n"					>> Makefile
+printf "removed/$p:\n"				>> Makefile
 for p in $TOREMOVE; do
 	printf "removed/$p:\n"				>> Makefile
 done
