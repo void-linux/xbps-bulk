@@ -75,7 +75,7 @@ while getopts a:Cc:d:Nm:th:vR: OPT; do
 		HOSTDIR="$OPTARG"
 		;;
 	R)
-		CFG_REPO="-R $OPTARG"
+		CFG_REPO+="-R $OPTARG "
 		;;
 	\?)
 		printf "%s\n" "$USAGE"
