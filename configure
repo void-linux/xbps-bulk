@@ -14,11 +14,11 @@ XSC=
 _append=""
 RCV=`command -v xbps-checkvers 2>/dev/null`
 RCV_F="repo-checkvers.txt"
-RCV_FPV="repo-checkvers-pkgver.txt"
 RCV_FR="repo-checkvers-remove.txt"
 TOBUILD=
 _TOBUILD=
 USAGE="Usage: $0 [-a cross-arch] [-CN] [-R repo] [-d|-m|-h dir]"
+declare -A PKGVER_ASSOC
 
 [ -f $RCV ] || {
 	printf "ERROR: The 'xbps-checkvers' was not found in the PATH.\n"
@@ -128,7 +128,9 @@ case "$?" in
 	grep pkgname "$RCV_F" | awk '{ print $2 }' >pkgs.txt ;;
 1) # version >= 0.54
 	cut -d' ' -f1 "$RCV_F" >pkgs.txt
-	cut -d' ' -f1-2 "$RCV_F" > "$RCV_FPV"
+	while read -r pkgname version remainder; do
+		PKGVER_ASSOC[$pkgname]=$version
+	done < "$RCV_F"
 	;;
 *)
 	echo "ERROR: couldn't determine xbps-checkvers version"
@@ -155,7 +157,7 @@ for p in `cat pkgs.txt`; do
 				touch tobuild/$p
 				;;
 			2)
-				version="$(grep "^$p " < $RCV_FPV | tail -n 1 | cut -d' ' -f2)"
+				version=${PKGVER_ASSOC[$p]}
 				TOREMOVE+="$p-$version "
 				TOREMOVE+="$p-dbg-$version "
 				[ "$XBPS_ARCH" = i686 ] && TOREMOVE32BIT+="$p-32bit-$version "
