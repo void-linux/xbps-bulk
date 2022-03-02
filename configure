@@ -47,7 +47,7 @@ while getopts a:Cc:d:Nm:th:vR: OPT; do
 		exit 0
 		;;
 	C)
-		rm -rf tobuild built toremove removed toremove32bit removed32bit
+		rm -rf tobuild built
 		rm -f *.txt Makefile
 		exit 0
 		;;
@@ -147,8 +147,8 @@ fi
 printf "INFO: Creating source targets...\n"
 TOREMOVE=
 TOREMOVE32BIT=
-rm -rf tobuild built toremove removed toremove32bit removed32bit
-mkdir -p tobuild built toremove removed toremove32bit removed32bit
+rm -rf tobuild built
+mkdir -p tobuild built
 for p in `cat pkgs.txt`; do
 	if [ -f "$SRCPKGS/$p/template" ]; then
 		$XSC show-avail $p 2>/dev/null
@@ -179,14 +179,6 @@ if [ -f pkgs-removed.txt ] ; then
 fi
 
 _TOBUILD="`find tobuild -type f`"
-
-for i in $TOREMOVE; do
-	touch toremove/$i
-done
-
-for i in $TOREMOVE32BIT; do
-	touch toremove32bit/$i
-done
 
 concat() {
 	local found=0
@@ -244,12 +236,23 @@ printf "PKGS = $TOBUILD\n"					>> Makefile
 printf "TOBUILD = \$(patsubst %%,tobuild/%%,\$(PKGS))\n"	>> Makefile
 printf "BUILT = \$(patsubst tobuild/%%,built/%%,\$(TOBUILD))\n\n"	>> Makefile
 printf "PKGS_REMOVED = $TOREMOVE\n"					>> Makefile
-printf "TOREMOVE = \$(patsubst %%,toremove/%%,\$(PKGS_REMOVED))\n"	>> Makefile
-printf "REMOVED = \$(patsubst toremove/%%,removed/%%,\$(TOREMOVE))\n\n"	>> Makefile
+printf "PKGS_REMOVED_32BIT = $TOREMOVE32BIT\n"					>> Makefile
 printf "all: allbuilt allremoved\n"					>> Makefile
 printf "\t@echo \"[Done]\"\n\n"					>> Makefile
 printf "allbuilt: \$(BUILT)\n\n"					>> Makefile
-printf "allremoved: \$(REMOVED)\n\n"					>> Makefile
+printf "allremoved:\n"					>> Makefile
+printf "\t@echo \"[xbps-rindex --remove --stage]\t\"\n"			>> Makefile
+# TODO: xbps-query --stage -s
+for subrepo in "" /debug /nonfree; do
+	printf "\t@( in_repo=\$\$(env XBPS_TARGET_ARCH=$PKG_ARCH xbps-query -i -R --repository=\"$HOSTDIR/binpkgs$subrepo\" -s '' | cut -d' ' -f2 | while read -r indexed; do for removed in \$(PKGS_REMOVED); do [ \"\$\$indexed\" = \"\$\$removed\" ] && echo \"$HOSTDIR/binpkgs$subrepo\"/\$\$removed.$PKG_ARCH.xbps; done; done ); [ \"\$\$in_repo\" ] && env XBPS_TARGET_ARCH=$PKG_ARCH xbps-rindex --remove --stage \$\$in_repo )\n" >> Makefile
+done
+if [ "$XBPS_ARCH" = i686 ]; then
+	printf "\t@echo \"[xbps-rindex --remove --stage # multilib]\t\"\n"			>> Makefile
+	for subrepo in /multilib /multilib/nonfree; do
+		printf "\t@( in_repo=\$\$(env XBPS_TARGET_ARCH=x86_64 xbps-query -i -R --repository=\"$HOSTDIR/binpkgs$subrepo\" -s '' | cut -d' ' -f2 | while read -r indexed; do for removed in \$(PKGS_REMOVED_32BIT); do [ \"\$\$indexed\" = \"\$\$removed\" ] && echo \"$HOSTDIR/binpkgs$subrepo\"/\$\$removed.x86_64.xbps; done; done ); [ \"\$\$in_repo\" ] && env XBPS_TARGET_ARCH=x86_64 xbps-rindex --remove --stage \$\$in_repo )\n" >> Makefile
+	done
+fi
+printf "\n"						>> Makefile
 printf "print_pkgs:\n"						>> Makefile
 printf "\t@echo \$(PKGS)\n\n"					>> Makefile
 printf "print_pkgs_removed:\n"						>> Makefile
@@ -260,19 +263,6 @@ printf "\t@echo \"[xbps-src]\t\${@F}\"\n"			>> Makefile
 printf "\t@( $XSC pkg \${@F}; rval=\$\$?; [ \$\$rval -eq 2 ] && exit 0 || exit \$\$rval )\n"	>> Makefile
 printf "\t@touch \$@\n"						>> Makefile
 printf "\t@rm tobuild/\${@F}\n\n"				>> Makefile
-
-printf "removed/%%: toremove/%%\n"					>> Makefile
-printf "\t@echo \"[xbps-rindex --remove --stage]\t\${@F}\"\n"			>> Makefile
-printf "\t@find \"$HOSTDIR/binpkgs\" -name \${@F}.$PKG_ARCH.xbps -exec env XBPS_ARCH=$PKG_ARCH ${CROSS_ARCH:+XBPS_TARGET_ARCH=$CROSS_ARCH} xbps-rindex --remove --stage '{}' ';'\n"	>> Makefile
-printf "\t@touch \$@\n"						>> Makefile
-printf "\t@rm toremove/\${@F}\n\n"				>> Makefile
-
-printf "removed32bit/%%: toremove32bit/%%\n"					>> Makefile
-printf "\t@echo \"[xbps-rindex --remove --stage # multilib]\t\${@F}\"\n"			>> Makefile
-printf "\t@find \"$HOSTDIR/binpkgs\" -name \${@F}.x86_64.xbps -exec env XBPS_TARGET_ARCH=x86_64 ${CROSS_ARCH:+XBPS_TARGET_ARCH=$CROSS_ARCH} xbps-rindex --remove --stage '{}' ';'\n"	>> Makefile
-printf "\t@touch \$@\n"						>> Makefile
-printf "\t@rm toremove/\${@F}\n\n"				>> Makefile
-
 
 printf "INFO: Finding and adding dependencies...\n"
 printf "# Dependencies\n"					>> Makefile
