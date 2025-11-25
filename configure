@@ -2,12 +2,16 @@
 VERSION=0.0.0
 
 CFG_CMDLINE=
+CFG_HOST=
 CFG_CROSS=
 CFG_REPO=
+CFG_STAGING=
+CFG_SYNC=
 CROSS_ARCH=
 DISTDIR=
 MASTERDIR=
 HOSTDIR=
+ROOTDIR=
 SRCPKGS=
 XSC=
 _append=""
@@ -15,14 +19,14 @@ RCV=`command -v xbps-checkvers 2>/dev/null`
 RCV_F="repo-checkvers.txt"
 TOBUILD=
 _TOBUILD=
-USAGE="Usage: $0 [-a cross-arch] [-CN] [-R repo] [-d|-m|-h dir]"
+USAGE="Usage: $0 [-a cross-arch] [-CMNs] [-R repo] [-d|-m|-h dir]"
 
 [ -f $RCV ] || {
 	printf "ERROR: The 'xbps-checkvers' was not found in the PATH.\n"
 	exit 1
 }
 
-while getopts a:Cc:d:Nm:th:vR: OPT; do
+while getopts a:Cd:Nm:th:vR:Ss OPT; do
 	case "$OPT" in
 	a)
 		CFG_CROSS="-a $OPTARG"
@@ -30,6 +34,7 @@ while getopts a:Cc:d:Nm:th:vR: OPT; do
 			native-*-musl|native-*)
 				unset CFG_CROSS CROSS_ARCH
 				export XBPS_ARCH=${OPTARG#native-}
+				CFG_HOST="-A $XBPS_ARCH"
 				;;
 			native) unset CFG_CROSS CROSS_ARCH;;
 			armv6hf) CROSS_ARCH="armv6l";;
@@ -77,6 +82,12 @@ while getopts a:Cc:d:Nm:th:vR: OPT; do
 	R)
 		CFG_REPO="-R $OPTARG"
 		;;
+	S)
+		CFG_SYNC=1
+		;;
+	s)
+		CFG_STAGING="--staging"
+		;;
 	\?)
 		printf "%s\n" "$USAGE"
 		exit 1
@@ -93,13 +104,21 @@ shift $(($OPTIND - 1))
 SRCPKGS=$DISTDIR/srcpkgs
 XBPS_SRCPKGDIR=$SRCPKGS
 
-XSC="$DISTDIR/xbps-src $CFG_CROSS $CFG_LOCAL $CFG_OVERLAYFS -L $CFG_CMDLINE -m $MASTERDIR -H $HOSTDIR"
+XSC="$DISTDIR/xbps-src $CFG_HOST $CFG_CROSS $CFG_LOCAL $CFG_OVERLAYFS -L $CFG_CMDLINE -m $MASTERDIR -H $HOSTDIR"
 
 if [ -n "$CFG_CROSS" ]; then
 	export XBPS_TARGET_ARCH=$CROSS_ARCH
 fi
 
-RCV_CMD_LINE="$RCV $CFG_REPO --distdir=${DISTDIR} ${*}"
+if [ -n "$CFG_SYNC" ]; then
+	ROOTDIR="$(mktemp -d tmp-root.XXXXXX)"
+	trap "rm -r -- ${ROOTDIR}" EXIT INT TERM
+	CFG_ROOT="-r $ROOTDIR"
+	printf "INFO: Syncing repositories for %s...\n" "${XBPS_TARGET_ARCH:-$XBPS_ARCH}"
+	xbps-install -S $CFG_ROOT $CFG_REPO
+fi
+
+RCV_CMD_LINE="$RCV $CFG_REPO $CFG_ROOT $CFG_STAGING --distdir=${DISTDIR} ${*}"
 printf "INFO: Getting list of updates, please wait...\n"
 printf "INFO: Running '$RCV_CMD_LINE' (${CROSS_ARCH:-native}) ...\n"
 
@@ -172,7 +191,7 @@ if [ "$(command -v xbps-src-make 2>/dev/null)" ]; then
 		-masterdir "$MASTERDIR" \
 		${masterdirarch:+-arch $masterdirarch} \
 		${CROSS_ARCH:+-cross ${CROSS_ARCH}} \
-		-flags "$CFG_LOCAL $CFG_OVERLAYFS -L $CFG_CMDLINE" \
+		-flags "$CFG_HOST $CFG_LOCAL $CFG_OVERLAYFS -L $CFG_CMDLINE" \
 		$TOBUILD \
 		>Makefile
 	if [ $? -eq 0 ]; then
