@@ -80,7 +80,7 @@ while getopts a:Cd:Nm:th:vR:Ss OPT; do
 		HOSTDIR="$OPTARG"
 		;;
 	R)
-		CFG_REPO="-R $OPTARG"
+		CFG_REPO+=" -R $OPTARG"
 		;;
 	S)
 		CFG_SYNC=1
@@ -114,6 +114,9 @@ if [ -n "$CFG_SYNC" ]; then
 	ROOTDIR="$(mktemp -d tmp-root.XXXXXX)"
 	trap "rm -r -- ${ROOTDIR}" EXIT INT TERM
 	CFG_ROOT="-r $ROOTDIR"
+	mkdir -p "$ROOTDIR/var/db/xbps" "$ROOTDIR/etc"
+	cp -a /var/db/xbps/keys "$ROOTDIR/var/db/xbps/keys"
+	cp -a /etc/xbps.d "$ROOTDIR/etc/xbps.d"
 	printf "INFO: Syncing repositories for %s...\n" "${XBPS_TARGET_ARCH:-$XBPS_ARCH}"
 	xbps-install -S $CFG_ROOT $CFG_REPO
 fi
