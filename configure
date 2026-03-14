@@ -26,7 +26,7 @@ USAGE="Usage: $0 [-a cross-arch] [-CMNs] [-R repo] [-d|-m|-h dir]"
 	exit 1
 }
 
-while getopts a:Cd:Nm:th:vR:Ss OPT; do
+while getopts a:Cc:d:Nm:th:vR:Ss OPT; do
 	case "$OPT" in
 	a)
 		CFG_CROSS="-a $OPTARG"
@@ -52,6 +52,9 @@ while getopts a:Cd:Nm:th:vR:Ss OPT; do
 		rm -rf tobuild built
 		rm -f *.txt Makefile
 		exit 0
+		;;
+	c)
+		CFG_CMDLINE="$OPTARG"
 		;;
 	d)
 		[ -d $OPTARG ] || {
